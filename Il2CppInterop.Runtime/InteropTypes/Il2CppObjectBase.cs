@@ -18,7 +18,7 @@ public class Il2CppObjectBase
 
     public Il2CppObjectBase(IntPtr pointer)
     {
-        CreateGCHandle(pointer);
+        myGcHandle = pointer;
     }
 
     public IntPtr ObjectClass => IL2CPP.il2cpp_object_get_class(Pointer);
@@ -38,8 +38,6 @@ public class Il2CppObjectBase
     {
         get
         {
-            var handleTarget = IL2CPP.il2cpp_gchandle_get_target(myGcHandle);
-            if (handleTarget == IntPtr.Zero) return true;
             return false;
         }
     }
@@ -148,27 +146,6 @@ public class Il2CppObjectBase
 
     public T? TryCast<T>() where T : Il2CppObjectBase
     {
-        var nestedTypeClassPointer = Il2CppClassPointerStore<T>.NativeClassPtr;
-        if (nestedTypeClassPointer == IntPtr.Zero)
-            throw new ArgumentException($"{typeof(T)} is not an Il2Cpp reference type");
-
-        var ownClass = IL2CPP.il2cpp_object_get_class(Pointer);
-        if (!IL2CPP.il2cpp_class_is_assignable_from(nestedTypeClassPointer, ownClass))
-            return null;
-
-        if (RuntimeSpecificsStore.IsInjected(ownClass))
-        {
-            if (ClassInjectorBase.GetMonoObjectFromIl2CppPointer(Pointer) is T monoObject) return monoObject;
-        }
-
-        return InitializerStore<T>.Initializer(Pointer);
-    }
-
-    ~Il2CppObjectBase()
-    {
-        IL2CPP.il2cpp_gchandle_free(myGcHandle);
-
-        if (pooledPtr == IntPtr.Zero) return;
-        Il2CppObjectPool.Remove(pooledPtr);
+        return this as T;
     }
 }

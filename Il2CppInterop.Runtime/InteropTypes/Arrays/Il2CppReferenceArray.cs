@@ -10,6 +10,8 @@ public class Il2CppReferenceArray<T> : Il2CppArrayBase<T> where T : Il2CppObject
     private static readonly int ourElementTypeSize;
     private static readonly bool ourElementIsValueType;
 
+    private T[] _values = Array.Empty<T>();
+
     static Il2CppReferenceArray()
     {
         ourElementTypeSize = IntPtr.Size;
@@ -29,20 +31,20 @@ public class Il2CppReferenceArray<T> : Il2CppArrayBase<T> where T : Il2CppObject
     {
     }
 
-    public Il2CppReferenceArray(long size) : base(AllocateArray(size))
+    public Il2CppReferenceArray(long size) : base(default)
     {
+        this._values = new T[size];
     }
 
-    public Il2CppReferenceArray(T[] arr) : base(AllocateArray(arr.Length))
+    public Il2CppReferenceArray(T[] arr) : base(default)
     {
-        for (var i = 0; i < arr.Length; i++)
-            this[i] = arr[i];
+        this._values = arr;
     }
 
     public override T this[int index]
     {
-        get => WrapElement(GetElementPointer(index))!;
-        set => StoreValue(GetElementPointer(index), value?.Pointer ?? IntPtr.Zero);
+        get => this._values[index];
+        set => this._values[index] = value;
     }
 
     private IntPtr GetElementPointer(int index)
@@ -90,15 +92,9 @@ public class Il2CppReferenceArray<T> : Il2CppArrayBase<T> where T : Il2CppObject
         return Il2CppObjectPool.Get<T>(memberPointer);
     }
 
-    private static IntPtr AllocateArray(long size)
+    private IntPtr AllocateArray(long size)
     {
-        if (size < 0)
-            throw new ArgumentOutOfRangeException(nameof(size), "Array size must not be negative");
-
-        var elementTypeClassPointer = Il2CppClassPointerStore<T>.NativeClassPtr;
-        if (elementTypeClassPointer == IntPtr.Zero)
-            throw new ArgumentException(
-                $"{nameof(Il2CppReferenceArray<T>)} requires an Il2Cpp reference type, which {typeof(T)} isn't");
-        return IL2CPP.il2cpp_array_new(elementTypeClassPointer, (ulong)size);
+        
+        return default;
     }
 }
