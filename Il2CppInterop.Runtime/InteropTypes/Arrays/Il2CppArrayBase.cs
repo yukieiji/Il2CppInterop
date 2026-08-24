@@ -35,6 +35,8 @@ public abstract class Il2CppArrayBase : Il2CppObjectBase, IEnumerable
 }
 public abstract class Il2CppArrayBase<T> : Il2CppArrayBase, IList<T>, IReadOnlyList<T>
 {
+    protected T[] Values = Array.Empty<T>();
+
     protected Il2CppArrayBase(IntPtr pointer) : base(pointer)
     {
     }
@@ -76,7 +78,7 @@ public abstract class Il2CppArrayBase<T> : Il2CppArrayBase, IList<T>, IReadOnlyL
         return ThrowImmutableLength();
     }
 
-    public new int Length => base.Length;// For binary compatibility
+    public new int Length => Values.Length;
     public int Count => Length;
     bool ICollection<T>.IsReadOnly => false;
 

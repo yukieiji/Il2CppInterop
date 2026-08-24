@@ -10,41 +10,24 @@ public class Il2CppReferenceArray<T> : Il2CppArrayBase<T> where T : Il2CppObject
     private static readonly int ourElementTypeSize;
     private static readonly bool ourElementIsValueType;
 
-    private T[] _values = Array.Empty<T>();
-
-    static Il2CppReferenceArray()
-    {
-        ourElementTypeSize = IntPtr.Size;
-        var nativeClassPtr = Il2CppClassPointerStore<T>.NativeClassPtr;
-        if (nativeClassPtr == IntPtr.Zero) return;
-        uint align = 0;
-        if (IL2CPP.il2cpp_class_is_valuetype(nativeClassPtr))
-        {
-            ourElementIsValueType = true;
-            ourElementTypeSize = IL2CPP.il2cpp_class_value_size(nativeClassPtr, ref align);
-        }
-
-        StaticCtorBody(typeof(Il2CppReferenceArray<T>));
-    }
-
     public Il2CppReferenceArray(IntPtr nativeObject) : base(nativeObject)
     {
     }
 
     public Il2CppReferenceArray(long size) : base(default)
     {
-        this._values = new T[size];
+        this.Values = new T[size];
     }
 
     public Il2CppReferenceArray(T[] arr) : base(default)
     {
-        this._values = arr;
+        this.Values = arr;
     }
 
     public override T this[int index]
     {
-        get => this._values[index];
-        set => this._values[index] = value;
+        get => this.Values[index];
+        set => this.Values[index] = value;
     }
 
     private IntPtr GetElementPointer(int index)
