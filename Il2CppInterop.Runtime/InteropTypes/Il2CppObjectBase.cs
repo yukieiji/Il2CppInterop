@@ -57,7 +57,7 @@ public class Il2CppObjectBase
     public T Cast<T>() where T : Il2CppObjectBase
     {
         return TryCast<T>() ?? throw new InvalidCastException(
-            $"Can't cast object of type {IL2CPP.il2cpp_class_get_name_(IL2CPP.il2cpp_object_get_class(Pointer))} to type {typeof(T)}");
+            $"Can't cast object of type {this.GetType()} to type {typeof(T)}");
     }
 
     internal static unsafe T UnboxUnsafe<T>(IntPtr pointer)
