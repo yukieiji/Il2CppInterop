@@ -39,8 +39,10 @@ public class Il2CppReferenceArray<T> : Il2CppArrayBase<T> where T : Il2CppObject
     [return: NotNullIfNotNull(nameof(arr))]
     public static implicit operator Il2CppReferenceArray<T>?(T[]? arr)
     {
-        if (arr == null) return null;
-
+        if (arr == null)
+        {
+            return null;
+        }
         return new Il2CppReferenceArray<T>(arr);
     }
 

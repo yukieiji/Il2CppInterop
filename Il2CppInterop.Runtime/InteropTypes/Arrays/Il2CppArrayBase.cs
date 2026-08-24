@@ -17,20 +17,11 @@ public abstract class Il2CppArrayBase : Il2CppObjectBase, IEnumerable
     /// </summary>
     private protected unsafe IntPtr ArrayStartPointer => IntPtr.Add(Pointer, sizeof(Il2CppObject) /* base */ + sizeof(void*) /* bounds */ + sizeof(nuint) /* max_length */);
 
-    public int Length => (int)IL2CPP.il2cpp_array_length(Pointer);
-
     public abstract IEnumerator GetEnumerator();
 
     private protected static bool ThrowImmutableLength()
     {
         throw new NotSupportedException("Arrays have immutable length");
-    }
-
-    private protected void ThrowIfIndexOutOfRange(int index)
-    {
-        if ((uint)index >= (uint)Length)
-            throw new ArgumentOutOfRangeException(nameof(index),
-                "Array index may not be negative or above length of the array");
     }
 }
 public abstract class Il2CppArrayBase<T> : Il2CppArrayBase, IList<T>, IReadOnlyList<T>
@@ -63,14 +54,24 @@ public abstract class Il2CppArrayBase<T> : Il2CppArrayBase, IList<T>, IReadOnlyL
 
     public void CopyTo(T[] array, int arrayIndex)
     {
-        if (array == null) throw new ArgumentNullException(nameof(array));
-        if (arrayIndex < 0) throw new ArgumentOutOfRangeException(nameof(arrayIndex));
+        if (array == null)
+        {
+            throw new ArgumentNullException(nameof(array));
+        }
+        if (arrayIndex < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(arrayIndex));
+        }
         if (array.Length - arrayIndex < Length)
+        {
             throw new ArgumentException(
                 $"Not enough space in target array: need {Length} slots, have {array.Length - arrayIndex}");
+        }
 
         for (var i = 0; i < Length; i++)
+        {
             array[i + arrayIndex] = this[i];
+        }
     }
 
     bool ICollection<T>.Remove(T item)
@@ -78,7 +79,7 @@ public abstract class Il2CppArrayBase<T> : Il2CppArrayBase, IList<T>, IReadOnlyL
         return ThrowImmutableLength();
     }
 
-    public new int Length => Values.Length;
+    public int Length => Values.Length;
     public int Count => Length;
     bool ICollection<T>.IsReadOnly => false;
 
@@ -175,5 +176,12 @@ public abstract class Il2CppArrayBase<T> : Il2CppArrayBase, IList<T>, IReadOnlyL
 
         object? IEnumerator.Current => Current;
         public T Current => myArray[myIndex];
+    }
+
+    private protected void ThrowIfIndexOutOfRange(int index)
+    {
+        if ((uint)index >= (uint)Length)
+            throw new ArgumentOutOfRangeException(nameof(index),
+                "Array index may not be negative or above length of the array");
     }
 }
