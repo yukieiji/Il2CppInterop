@@ -8,51 +8,98 @@ using Il2CppInterop.Runtime.Runtime;
 
 namespace Il2CppInterop.Runtime.InteropTypes;
 
-public class InterfaceAdapterProxy : DispatchProxy
+using System;
+using System.Reflection;
+using System.Reflection.Emit;
+
+public static class DynamicAdapter
 {
-    private object? _target;
-
-    // 呼び出し対象（クラス B など）を保持する初期化メソッド
-    public void Initialize(object target)
+    public static TTarget? CreateAdapter<TTarget>(object source, IntPtr ptrValue = default) where TTarget : class
     {
-        _target = target ?? throw new ArgumentNullException(nameof(target));
-    }
+        Type targetType = typeof(TTarget);
+        Type sourceType = source.GetType();
 
-    // インターフェースのメソッドが呼ばれた時に実行される処理
-    protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
-    {
-        if (targetMethod == null || _target == null)
+        // 1. 動的アセンブリとモジュールの作成
+        AssemblyName assemblyName = new AssemblyName("DynamicAdapterAssembly");
+        AssemblyBuilder assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.Run);
+        ModuleBuilder moduleBuilder = assemblyBuilder.DefineDynamicModule("MainModule");
+
+        // 2. TTarget(クラス A) を継承した動的クラスを定義
+        string typeName = $"{targetType.Name}_ProxyFor_{sourceType.Name}_{Guid.NewGuid():N}";
+        TypeBuilder typeBuilder = moduleBuilder.DefineType(typeName, TypeAttributes.Public | TypeAttributes.Class, targetType);
+
+        // 3. 内部で保持する source (クラス B のインスタンス) のフィールドを定義
+        FieldBuilder sourceField = typeBuilder.DefineField("_source", typeof(object), FieldAttributes.Private);
+
+        // ---------------------------------------------------------
+        // 4. コンストラクタの生成 (IntPtr を渡して base(IntPtr) を呼び出す)
+        // ---------------------------------------------------------
+        ConstructorBuilder ctor = typeBuilder.DefineConstructor(MethodAttributes.Public, CallingConventions.Standard, new[] { typeof(object), typeof(IntPtr) });
+        ILGenerator ctorIl = ctor.GetILGenerator();
+
+        // クラス A の A(IntPtr) コンストラクタを検索
+        ConstructorInfo baseCtor = targetType.GetConstructor(new[] { typeof(IntPtr) })
+            ?? throw new InvalidOperationException($"{targetType.Name} に (IntPtr) を受取るコンストラクタが見つかりません。");
+
+        // base(ptr) の呼び出し
+        ctorIl.Emit(OpCodes.Ldarg_0); // this
+        ctorIl.Emit(OpCodes.Ldarg_2); // 引数で渡された IntPtr (第2引数)
+        ctorIl.Emit(OpCodes.Call, baseCtor);
+
+        // this._source = source
+        ctorIl.Emit(OpCodes.Ldarg_0);
+        ctorIl.Emit(OpCodes.Ldarg_1); // 第1引数の object source
+        ctorIl.Emit(OpCodes.Stfld, sourceField);
+        ctorIl.Emit(OpCodes.Ret);
+
+        // 5. TTarget (クラス A) の virtual メソッドをオーバーライド
+        MethodInfo[] targetMethods = targetType.GetMethods(BindingFlags.Public | BindingFlags.Instance);
+        foreach (var targetMethod in targetMethods)
+        {
+            if (targetMethod.DeclaringType == typeof(object) || !targetMethod.IsVirtual || targetMethod.IsFinal)
+            {
+                continue;
+            }
+
+            ParameterInfo[] parameters = targetMethod.GetParameters();
+            Type[] paramTypes = Array.ConvertAll(parameters, p => p.ParameterType);
+            MethodInfo? sourceMethod = sourceType.GetMethod(targetMethod.Name, paramTypes);
+
+            if (sourceMethod == null)
+            {
+                continue;
+            }
+
+            MethodBuilder methodBuilder = typeBuilder.DefineMethod(
+                targetMethod.Name,
+                MethodAttributes.Public | MethodAttributes.Virtual,
+                targetMethod.ReturnType,
+                paramTypes
+            );
+
+            ILGenerator il = methodBuilder.GetILGenerator();
+            il.Emit(OpCodes.Ldarg_0);
+            il.Emit(OpCodes.Ldfld, sourceField);
+            il.Emit(OpCodes.Castclass, sourceType);
+
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                il.Emit(OpCodes.Ldarg, i + 1);
+            }
+
+            il.Emit(OpCodes.Callvirt, sourceMethod);
+            il.Emit(OpCodes.Ret);
+
+            typeBuilder.DefineMethodOverride(methodBuilder, targetMethod);
+        }
+
+        // 6. インスタンス化 (引数として source と ptrValue を渡す)
+        Type? proxyType = typeBuilder.CreateType();
+        if (proxyType == null)
         {
             return null;
         }
-
-        // 呼び出されたインターフェースメソッドと同じ名前・引数を持つメソッドをターゲットから検索
-        Type targetType = _target.GetType();
-        Type[] paramTypes = Array.ConvertAll(targetMethod.GetParameters(), p => p.ParameterType);
-
-        MethodInfo? realMethod = targetType.GetMethod(
-            targetMethod.Name,
-            BindingFlags.Public | BindingFlags.Instance,
-            null,
-            paramTypes,
-            null
-        );
-
-        if (realMethod == null)
-        {
-            throw new NotImplementedException($"型 '{targetType.Name}' にメソッド '{targetMethod.Name}' が見つかりません。");
-        }
-
-        // 実際のクラスのメソッドを実行
-        return realMethod.Invoke(_target, args);
-    }
-
-    // 便利なヘルパーメソッド
-    public static TInterface? Create<TInterface>(object target) where TInterface : class
-    {
-        object proxy = Create<TInterface, InterfaceAdapterProxy>();
-        ((InterfaceAdapterProxy)proxy).Initialize(target);
-        return proxy as TInterface;
+        return (TTarget?)Activator.CreateInstance(proxyType, source, ptrValue);
     }
 }
 
@@ -194,6 +241,6 @@ public class Il2CppObjectBase
 
     public T? TryCast<T>() where T : Il2CppObjectBase
     {
-        return InterfaceAdapterProxy.Create<T>(this); // インターフェスの実装などが剥がれてるっぽいのでこれで強制的にアダプタを噛ましてキャスト
+        return DynamicAdapter.CreateAdapter<T>(this);
     }
 }
