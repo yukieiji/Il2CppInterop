@@ -8,6 +8,54 @@ using Il2CppInterop.Runtime.Runtime;
 
 namespace Il2CppInterop.Runtime.InteropTypes;
 
+public class InterfaceAdapterProxy : DispatchProxy
+{
+    private object? _target;
+
+    // 呼び出し対象（クラス B など）を保持する初期化メソッド
+    public void Initialize(object target)
+    {
+        _target = target ?? throw new ArgumentNullException(nameof(target));
+    }
+
+    // インターフェースのメソッドが呼ばれた時に実行される処理
+    protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+    {
+        if (targetMethod == null || _target == null)
+        {
+            return null;
+        }
+
+        // 呼び出されたインターフェースメソッドと同じ名前・引数を持つメソッドをターゲットから検索
+        Type targetType = _target.GetType();
+        Type[] paramTypes = Array.ConvertAll(targetMethod.GetParameters(), p => p.ParameterType);
+
+        MethodInfo? realMethod = targetType.GetMethod(
+            targetMethod.Name,
+            BindingFlags.Public | BindingFlags.Instance,
+            null,
+            paramTypes,
+            null
+        );
+
+        if (realMethod == null)
+        {
+            throw new NotImplementedException($"型 '{targetType.Name}' にメソッド '{targetMethod.Name}' が見つかりません。");
+        }
+
+        // 実際のクラスのメソッドを実行
+        return realMethod.Invoke(_target, args);
+    }
+
+    // 便利なヘルパーメソッド
+    public static TInterface? Create<TInterface>(object target) where TInterface : class
+    {
+        object proxy = Create<TInterface, InterfaceAdapterProxy>();
+        ((InterfaceAdapterProxy)proxy).Initialize(target);
+        return proxy as TInterface;
+    }
+}
+
 public class Il2CppObjectBase
 {
     private static readonly MethodInfo _unboxMethod = typeof(Il2CppObjectBase).GetMethod(nameof(Unbox));
@@ -146,6 +194,6 @@ public class Il2CppObjectBase
 
     public T? TryCast<T>() where T : Il2CppObjectBase
     {
-        return this as T;
+        return InterfaceAdapterProxy.Create<T>(this); // インターフェスの実装などが剥がれてるっぽいのでこれで強制的にアダプタを噛ましてキャスト
     }
 }
